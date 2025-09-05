@@ -66,6 +66,9 @@ python test_agent.py
 ```bash
 # Тестирование TTS сервиса
 python examples/tts_example.py
+
+# Тестирование WhisperX STT с диаризацией
+python examples/whisperx_example.py
 ```
 
 ## Структура проекта
@@ -76,7 +79,9 @@ AI_HRbot/
 │   ├── services/           # Микросервисы
 │   │   ├── audio_processing.py    # Обработка аудио
 │   │   ├── vad_service.py         # Voice Activity Detection
-│   │   ├── stt_service.py         # Speech-to-Text
+│   │   ├── stt_service.py         # Speech-to-Text (faster-whisper)
+│   │   ├── whisperx_stt_service.py # STT с WhisperX (диаризация)
+│   │   ├── hybrid_stt_service.py  # Гибридный STT сервис
 │   │   ├── prosody_service.py     # Анализ просодии
 │   │   ├── emotion_service.py     # Распознавание эмоций
 │   │   └── tts_service.py         # Text-to-Speech
@@ -88,7 +93,8 @@ AI_HRbot/
 ├── env.example           # Пример переменных окружения
 ├── test_agent.py         # Тестовый скрипт
 └── examples/             # Примеры использования
-    └── tts_example.py    # Пример TTS сервиса
+    ├── tts_example.py    # Пример TTS сервиса
+    └── whisperx_example.py # Пример WhisperX STT
 ```
 
 ## Конфигурация
@@ -102,10 +108,11 @@ AI_HRbot/
 
 ### Настройка моделей
 
-#### Whisper (STT)
-- `tiny` - самый быстрый, но менее точный
-- `base` - баланс скорости и точности (рекомендуется)
-- `large` - самый точный, но медленный
+#### STT (Speech-to-Text)
+- **faster-whisper**: быстрая транскрипция
+- **WhisperX**: высокая точность + диаризация + выравнивание слов
+- **Гибридный режим**: автоматический выбор лучшего движка
+- Размеры моделей: `tiny`, `base`, `small`, `medium`, `large`
 
 #### VAD
 - `threshold` - чувствительность обнаружения речи
@@ -192,6 +199,39 @@ print(f"Длительность буфера: {status['buffer_duration']:.2f}s"
 ### Логи
 
 Логи сохраняются в файл, указанный в `LOG_FILE` переменной окружения.
+
+## Возможности WhisperX
+
+### Диаризация (Speaker Diarization)
+- Автоматическое разделение речи разных спикеров
+- Определение временных меток для каждого спикера
+- Поддержка множественных участников интервью
+
+### Выравнивание слов (Word Alignment)
+- Точные временные метки для каждого слова
+- Улучшенная точность транскрипции
+- Поддержка длинных аудио без потери качества
+
+### Гибридный режим
+- Автоматический выбор между WhisperX и faster-whisper
+- Fallback на faster-whisper если WhisperX недоступен
+- Оптимальная производительность в любых условиях
+
+### Пример использования
+
+```python
+from src.main import AIHRAgent
+
+agent = AIHRAgent()
+await agent.start()
+
+# Транскрипция с диаризацией
+speaker_result = await agent.transcribe_with_speakers(audio_segment)
+
+# Получение возможностей STT
+capabilities = agent.get_stt_capabilities()
+print(f"Диаризация доступна: {capabilities['speaker_diarization']}")
+```
 
 ## Интеграция
 

@@ -8,7 +8,7 @@ import sys
 from typing import List, Optional
 from src.services.audio_processing import AudioProcessor, AudioBuffer
 from src.services.vad_service import SileroVADService
-from src.services.stt_service import STTService
+from src.services.hybrid_stt_service import HybridSTTService
 from src.services.prosody_service import ProsodyAnalysisService
 from src.services.emotion_service import EmotionRecognitionService
 from src.services.tts_service import TTSService
@@ -37,7 +37,7 @@ class AIHRAgent:
         # Инициализация сервисов
         self.audio_processor = AudioProcessor()
         self.vad_service = SileroVADService()
-        self.stt_service = STTService()
+        self.stt_service = HybridSTTService()  # Используем гибридный STT
         self.prosody_service = ProsodyAnalysisService()
         self.emotion_service = EmotionRecognitionService()
         self.tts_service = TTSService()
@@ -270,6 +270,50 @@ class AIHRAgent:
         except Exception as e:
             self.logger.error(f"Ошибка генерации ответа бота: {e}")
             return None
+    
+    async def transcribe_with_speakers(
+        self, 
+        audio_segment: AudioSegment,
+        language: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Транскрипция с разделением спикеров (если доступно)
+        
+        Args:
+            audio_segment: Аудио сегмент
+            language: Язык речи
+            
+        Returns:
+            Результат с разделением спикеров или None
+        """
+        try:
+            if not self.is_running:
+                return None
+            
+            self.logger.info("Транскрипция с разделением спикеров...")
+            
+            result = await self.stt_service.transcribe_with_speakers(audio_segment, language)
+            
+            if result:
+                self.logger.info(f"Транскрипция с спикерами выполнена: {len(result.get('speaker_segments', []))} сегментов")
+                return result
+            else:
+                self.logger.warning("Диаризация недоступна или не удалась")
+                return None
+                
+        except Exception as e:
+            self.logger.error(f"Ошибка транскрипции с спикерами: {e}")
+            return None
+    
+    def get_stt_capabilities(self) -> Dict[str, Any]:
+        """Получение возможностей STT сервиса"""
+        try:
+            if hasattr(self.stt_service, 'get_capabilities'):
+                return self.stt_service.get_capabilities()
+            return {"basic_transcription": True}
+        except Exception as e:
+            self.logger.error(f"Ошибка получения возможностей STT: {e}")
+            return {"basic_transcription": True}
 
 
 async def main():

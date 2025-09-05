@@ -90,6 +90,34 @@ async def test_agent():
             
             await asyncio.sleep(0.5)
         
+        # Тестируем возможности STT
+        logger.info("Тестирование возможностей STT...")
+        capabilities = agent.get_stt_capabilities()
+        logger.info(f"Возможности STT: {capabilities}")
+        
+        # Тестируем транскрипцию с диаризацией (если доступно)
+        if capabilities.get('speaker_diarization', False):
+            logger.info("Тестирование транскрипции с диаризацией...")
+            
+            # Создаем тестовый аудио сегмент для диаризации
+            test_audio = np.random.randn(32000).astype(np.float32) * 0.1  # 2 секунды
+            test_segment = AudioSegment(
+                start_time=0.0,
+                end_time=2.0,
+                duration=2.0,
+                audio_data=test_audio.tobytes(),
+                confidence=1.0,
+                is_speech=True
+            )
+            
+            speaker_result = await agent.transcribe_with_speakers(test_segment)
+            if speaker_result:
+                logger.info(f"✅ Диаризация выполнена: {len(speaker_result.get('speaker_segments', []))} сегментов")
+            else:
+                logger.warning("❌ Диаризация не удалась")
+        else:
+            logger.info("ℹ️ Диаризация недоступна")
+        
         # Получаем статус
         status = await agent.get_status()
         logger.info(f"Статус агента: {status}")
