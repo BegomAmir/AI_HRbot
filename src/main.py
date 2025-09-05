@@ -8,10 +8,13 @@ import sys
 from typing import List, Optional
 from src.services.audio_processing import AudioProcessor, AudioBuffer
 from src.services.vad_service import SileroVADService
+from src.services.endpointing_service import EndpointingService
 from src.services.hybrid_stt_service import HybridSTTService
 from src.services.prosody_service import ProsodyAnalysisService
 from src.services.emotion_service import EmotionRecognitionService
 from src.services.tts_service import TTSService
+from src.services.publisher_service import PublisherService
+from src.services.llm_integration_service import LLMIntegrationService
 from src.models.interview import AudioSegment, SpeechTranscription, ProsodyFeatures, EmotionAnalysis
 from src.utils.logger import get_logger, setup_logger
 from src.config.settings import settings
@@ -37,10 +40,13 @@ class AIHRAgent:
         # Инициализация сервисов
         self.audio_processor = AudioProcessor()
         self.vad_service = SileroVADService()
+        self.endpointing_service = EndpointingService()
         self.stt_service = HybridSTTService()  # Используем гибридный STT
         self.prosody_service = ProsodyAnalysisService()
         self.emotion_service = EmotionRecognitionService()
         self.tts_service = TTSService()
+        self.publisher_service = PublisherService()
+        self.llm_integration_service = LLMIntegrationService()
         
         # Аудио буфер
         self.audio_buffer = AudioBuffer(max_duration=10.0)
@@ -101,10 +107,13 @@ class AIHRAgent:
         
         services = [
             ("VAD", self.vad_service.health_check()),
+            ("Endpointing", self.endpointing_service.health_check()),
             ("STT", self.stt_service.health_check()),
             ("Prosody", self.prosody_service.health_check()),
             ("Emotion", self.emotion_service.health_check()),
-            ("TTS", self.tts_service.health_check())
+            ("TTS", self.tts_service.health_check()),
+            ("Publisher", self.publisher_service.health_check()),
+            ("LLM Integration", self.llm_integration_service.health_check())
         ]
         
         for service_name, health_check in services:
@@ -173,14 +182,36 @@ class AIHRAgent:
                 self.logger.debug("Речь не обнаружена")
                 return
             
-            # 2. STT - транскрипция речи
+            # 2. Endpointing - определение конца речи
+            endpoints = await self.endpointing_service.process_audio_stream(speech_segments)
+            
+            # 3. STT - транскрипция речи
             transcriptions = await self.stt_service.transcribe_batch(speech_segments)
             
-            # 3. Анализ просодии
+            # 4. Анализ просодии
             prosody_features = await self.prosody_service.analyze_batch(speech_segments)
             
-            # 4. Распознавание эмоций
+            # 5. Распознавание эмоций
             emotion_analysis = await self.emotion_service.analyze_batch(speech_segments)
+            
+            # 6. Подготовка данных для LLM
+            if transcriptions:
+                llm_input = await self.llm_integration_service.prepare_llm_input(
+                    transcriptions=transcriptions,
+                    prosody_features=prosody_features,
+                    emotion_analysis=emotion_analysis,
+                    additional_context={
+                        "endpoints": [{"start": ep.start_time, "end": ep.end_time, "duration": ep.duration} for ep in endpoints],
+                        "session_id": self.current_session
+                    }
+                )
+                
+                # Сохраняем данные для LLM в файл
+                try:
+                    llm_file = await self.llm_integration_service.save_llm_input_to_file(llm_input)
+                    self.logger.info(f"Данные для LLM сохранены: {llm_file}")
+                except Exception as e:
+                    self.logger.error(f"Ошибка сохранения данных для LLM: {e}")
             
             # Уведомляем колбэки об анализе
             for callback in self.analysis_callbacks:
@@ -189,6 +220,8 @@ class AIHRAgent:
                         'transcriptions': transcriptions,
                         'prosody': prosody_features,
                         'emotions': emotion_analysis,
+                        'endpoints': endpoints,
+                        'llm_input': llm_input if transcriptions else None,
                         'timestamp': asyncio.get_event_loop().time()
                     })
                 except Exception as e:
@@ -219,10 +252,13 @@ class AIHRAgent:
             'buffer_duration': self.audio_buffer.get_buffer_duration(),
             'services': {
                 'vad': 'active',
+                'endpointing': 'active',
                 'stt': 'active',
                 'prosody': 'active',
                 'emotion': 'active',
-                'tts': 'active'
+                'tts': 'active',
+                'publisher': 'active',
+                'llm_integration': 'active'
             }
         }
     
@@ -254,6 +290,25 @@ class AIHRAgent:
             
             if audio_response:
                 self.logger.info(f"Ответ бота сгенерирован: {audio_response.duration:.2f}s")
+                
+                # Публикуем аудио ответ
+                try:
+                    publish_result = await self.publisher_service.publish_audio(
+                        audio_response,
+                        metadata={
+                            "response_text": response_text,
+                            "emotion": emotion,
+                            "session_id": self.current_session
+                        }
+                    )
+                    
+                    if publish_result.success:
+                        self.logger.info(f"Ответ бота опубликован: {publish_result.destination}")
+                    else:
+                        self.logger.warning(f"Ошибка публикации ответа: {publish_result.message}")
+                        
+                except Exception as e:
+                    self.logger.error(f"Ошибка публикации ответа бота: {e}")
                 
                 # Уведомляем колбэки о сгенерированном ответе
                 for callback in self.audio_callbacks:
@@ -314,6 +369,69 @@ class AIHRAgent:
         except Exception as e:
             self.logger.error(f"Ошибка получения возможностей STT: {e}")
             return {"basic_transcription": True}
+    
+    async def force_speech_endpoint(self) -> Optional[Dict[str, Any]]:
+        """
+        Принудительное завершение текущей речи
+        
+        Returns:
+            Информация о завершенной речи или None
+        """
+        try:
+            if not self.is_running:
+                return None
+            
+            endpoint = await self.endpointing_service.force_endpoint()
+            
+            if endpoint:
+                self.logger.info(f"Речь принудительно завершена: {endpoint.duration:.2f}s")
+                return {
+                    "start_time": endpoint.start_time,
+                    "end_time": endpoint.end_time,
+                    "duration": endpoint.duration,
+                    "confidence": endpoint.confidence,
+                    "is_complete": endpoint.is_complete
+                }
+            else:
+                self.logger.info("Активной речи для завершения не найдено")
+                return None
+                
+        except Exception as e:
+            self.logger.error(f"Ошибка принудительного завершения речи: {e}")
+            return None
+    
+    def get_endpointing_status(self) -> Dict[str, Any]:
+        """Получение статуса endpointing"""
+        try:
+            return {
+                "is_speech_active": self.endpointing_service.is_speech_active(),
+                "current_speech_duration": self.endpointing_service.get_current_speech_duration(),
+                "silence_duration": self.endpointing_service.get_silence_duration(),
+                "config": {
+                    "silence_threshold": self.endpointing_service.config.silence_threshold,
+                    "min_speech_duration": self.endpointing_service.config.min_speech_duration,
+                    "max_speech_duration": self.endpointing_service.config.max_speech_duration
+                }
+            }
+        except Exception as e:
+            self.logger.error(f"Ошибка получения статуса endpointing: {e}")
+            return {}
+    
+    def get_publisher_statistics(self) -> Dict[str, Any]:
+        """Получение статистики publisher"""
+        try:
+            return self.publisher_service.get_statistics()
+        except Exception as e:
+            self.logger.error(f"Ошибка получения статистики publisher: {e}")
+            return {}
+    
+    def get_llm_statistics(self) -> Dict[str, Any]:
+        """Получение статистики LLM интеграции"""
+        try:
+            return self.llm_integration_service.get_statistics()
+        except Exception as e:
+            self.logger.error(f"Ошибка получения статистики LLM: {e}")
+            return {}
 
 
 async def main():

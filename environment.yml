@@ -1,0 +1,19 @@
+name: hrbot
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.9
+  - pip
+  # аудио-зависимости
+  - pyaudio
+  - webrtcvad
+  - numpy=1.24.3
+  - librosa=0.10.1
+  # PyTorch (без torchaudio)
+  - pytorch=2.0.1
+  - pip:
+      - torchaudio==2.0.2
+      - soundfile==0.12.1
+      - opensmile==2.4.1
+      - -r requirements.txt

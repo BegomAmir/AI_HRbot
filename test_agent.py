@@ -118,6 +118,29 @@ async def test_agent():
         else:
             logger.info("ℹ️ Диаризация недоступна")
         
+        # Тестируем endpointing
+        logger.info("Тестирование endpointing...")
+        endpointing_status = agent.get_endpointing_status()
+        logger.info(f"Статус endpointing: {endpointing_status}")
+        
+        # Тестируем принудительное завершение речи
+        logger.info("Тестирование принудительного завершения речи...")
+        endpoint_result = await agent.force_speech_endpoint()
+        if endpoint_result:
+            logger.info(f"✅ Речь завершена: {endpoint_result['duration']:.2f}s")
+        else:
+            logger.info("ℹ️ Активной речи для завершения не найдено")
+        
+        # Тестируем статистику publisher
+        logger.info("Тестирование статистики publisher...")
+        publisher_stats = agent.get_publisher_statistics()
+        logger.info(f"Статистика publisher: {publisher_stats}")
+        
+        # Тестируем статистику LLM
+        logger.info("Тестирование статистики LLM...")
+        llm_stats = agent.get_llm_statistics()
+        logger.info(f"Статистика LLM: {llm_stats}")
+        
         # Получаем статус
         status = await agent.get_status()
         logger.info(f"Статус агента: {status}")
