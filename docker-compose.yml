@@ -1,0 +1,13 @@
+services:
+  hr-ml-ru:
+    build: .
+    image: hr-ml-ru-stateless:v4
+    environment:
+      - LLM_BASE_URL=${LLM_BASE_URL:-http://host.docker.internal:1234}
+      - LLM_API_KEY=${LLM_API_KEY:-lm-studio}
+      - LLM_MODEL=${LLM_MODEL:-openai/gpt-oss-20b}
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
