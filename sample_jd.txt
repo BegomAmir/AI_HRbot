@@ -1,0 +1,2 @@
+Ищем Senior Data Engineer: Python/ETL/Airflow, сильный SQL, Docker/K8s (базово), коммуникация. Плюс: React.
+Приоритеты: Python 0.4, SQL 0.25, Airflow 0.15, Docker/K8s 0.1, Communication 0.1.

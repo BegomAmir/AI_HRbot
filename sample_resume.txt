@@ -1,0 +1,3 @@
+Иван Иванов
+Опыт: 6+ лет. Python, SQL, Airflow, Docker, K8s (базово), FastAPI, sklearn/pandas, React(базово).
+Проекты: ETL; рекомендательная система (uplift +7% CTR); внутренний дашборд.
