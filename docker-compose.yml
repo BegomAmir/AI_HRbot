@@ -1,7 +1,7 @@
 services:
-  hr-ml-ru:
+  hr-ml-ru-oop:
     build: .
-    image: hr-ml-ru-stateless:v4
+    image: hr-ml-ru-stateless-oop:latest
     environment:
       - LLM_BASE_URL=${LLM_BASE_URL:-http://host.docker.internal:1234}
       - LLM_API_KEY=${LLM_API_KEY:-lm-studio}
